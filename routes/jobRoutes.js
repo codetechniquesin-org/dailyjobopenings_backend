@@ -15,7 +15,7 @@ router.post("/post-job", createJob);
 
 
 // GET jobs (with filters)
-router.get("/jobs", getJobs);
+router.get("/get-jobs", getJobs);
 
 
 // GET job details
