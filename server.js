@@ -7,6 +7,7 @@ const morgan = require("morgan");
 const connectDB = require("./config/db");
 const jobRoutes = require("./routes/jobRoutes");
 const jobAlertRoutes = require("./routes/jobalertroutes");
+const resourceRoutes = require("./routes/resourceRoutes").default;
 
 // ✅ Cron job (works in Render)
 require("./cron/jobstatusupdater");
@@ -67,8 +68,11 @@ connectDB();
    ✅ ROUTES
 ========================= */
 
+
 app.use("/api", jobRoutes);
 app.use("/api/job-alerts", jobAlertRoutes);
+console.log(resourceRoutes);
+app.use("/api/resources", resourceRoutes);
 
 // Root Route
 app.get("/", (req, res) => {
