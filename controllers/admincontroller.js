@@ -86,7 +86,12 @@ exports.createAdmin = async (req, res) => {
       </div>
     `;
 console.log("Sending email to:", email);
-    await sendEmail(email, "Your Admin Account Details", html);
+try {
+  await sendEmail(email, "Your Admin Account Details", html);
+} catch (err) {
+  console.error("Email failed:", err.message);
+  // DO NOT FAIL ADMIN CREATION
+}
 
     res.status(201).json({
       message: "Admin created and email sent successfully",
