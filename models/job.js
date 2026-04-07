@@ -112,5 +112,18 @@ if (!this.slug) {
 // 🔥 TTL Index (Auto delete after expiresAt)
 jobSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+//single feild indexes for faster queries
+jobSchema.index({jobTitle: 1});
+jobSchema.index({location: 1});
+jobSchema.index({jobCategory: 1});
+jobSchema.index({createdAt: -1});
+jobSchema.index({slug: 1});
+
+//compund indexes(high impact)
+jobSchema.index({jobTitle: 1, location: 1});
+jobSchema.index({jobCategory: 1, location:1});
+
+//Text search
+jobSchema.index({jobTitle: "text", companyName: "text", jobDescription: "text",});
 
 module.exports = mongoose.model("Job", jobSchema);
