@@ -913,48 +913,66 @@ const getStats = asyncHandler(async (req, res) => {
 //this is used to fetch the quick job categories in app.jsx page
 const getJobCategories = asyncHandler(async (req, res) => {
   try {
-    const categories = [
-      {
-        label: "Software IT Jobs",
-        count: await Job.countDocuments({ jobCategory: "IT" })
-      },
-      {
-        label: "Work From Home",
-        count: await Job.countDocuments({ workMode: "Remote" })
-      },
-      {
-        label: "Government Jobs",
-        count: await Job.countDocuments({ jobCategory: "Government" })
-      },
-      {
-        label: "MBA / BBA Jobs",
-        count: await Job.countDocuments({
-          education: { $regex: /MBA|BBA/i }
-        })
-      },
-      {
-        label: "Internships",
-        count: await Job.countDocuments({ jobType: "Internship" })
-      },
-      {
-        label: "Walk-in Jobs",
-        count: await Job.countDocuments({
-          tags: { $in: ["walk-in"] }
-        })
-      },
-      {
-        label: "Data Analyst Jobs",
-        count: await Job.countDocuments({
-          jobRole: { $regex: /data/i }
-        })
-      },
-      {
-        label: "Non-Engineering",
-        count: await Job.countDocuments({
-          jobCategory: { $ne: "IT" }
-        })
-      }
-    ];
+const categories = [
+  {
+    label: "Software IT Jobs",
+    type: "category",
+    value: "IT",
+    count: await Job.countDocuments({ jobCategory: "IT" })
+  },
+  {
+    label: "Work From Home",
+    type: "workMode",
+    value: "REMOTE",
+    count: await Job.countDocuments({ workMode: "REMOTE" })
+  },
+  {
+    label: "Government Jobs",
+    type: "category",
+    value: "Government",
+    count: await Job.countDocuments({ jobCategory: "Government" })
+  },
+  {
+    label: "MBA / BBA Jobs",
+    type: "education",
+    value: "MBA|BBA",
+    count: await Job.countDocuments({
+      education: { $regex: /MBA|BBA/i }
+    })
+  },
+  {
+    label: "Internships",
+    type: "jobType",
+    value: "Internship",
+    count: await Job.countDocuments({
+      jobType: "Internship"
+    })
+  },
+  {
+    label: "Walk-in Jobs",
+    type: "tag",
+    value: "walk-in",
+    count: await Job.countDocuments({
+      tags: { $in: ["walk-in"] }
+    })
+  },
+  {
+    label: "Data Analyst Jobs",
+    type: "role",
+    value: "data",
+    count: await Job.countDocuments({
+      jobRole: { $regex: /data/i }
+    })
+  },
+  {
+    label: "Non-Engineering",
+    type: "category",
+    value: "Non-Engineering",
+    count: await Job.countDocuments({
+      jobCategory: { $ne: "IT" }
+    })
+  }
+];
 
     res.status(200).json({
       success: true,
@@ -1025,27 +1043,151 @@ const getJobsByLocation = asyncHandler(async (req, res) => {
     const locations = await Job.aggregate([
       {
         $match: {
-          status: "active",
-          expiryDate: { $gte: new Date() }
+          status: "ACTIVE",
+          expiryDate: { $gte: new Date() },
+          location: {
+            $exists: true,
+            $ne: ""
+          }
         }
       },
+
+      // Split locations like:
+      // "Hyderabad, Bangalore and Chennai"
+      // "Hyderabad/Bangalore"
+      {
+        $project: {
+          locations: {
+            $split: [
+              {
+                $replaceAll: {
+                  input: {
+                    $replaceAll: {
+                      input: {
+                        $replaceAll: {
+                          input: "$location",
+                          find: " and ",
+                          replacement: ","
+                        }
+                      },
+                      find: "/",
+                      replacement: ","
+                    }
+                  },
+                  find: ", ",
+                  replacement: ","
+                }
+              },
+              ","
+            ]
+          }
+        }
+      },
+
+      {
+        $unwind: "$locations"
+      },
+
+      {
+        $project: {
+          location: {
+            $trim: {
+              input: "$locations"
+            }
+          }
+        }
+      },
+
+      // Normalize common variations
+      {
+        $set: {
+          location: {
+            $switch: {
+              branches: [
+                // Bangalore -> Bengaluru
+                {
+                  case: {
+                    $eq: ["$location", "Bangalore"]
+                  },
+                  then: "Bengaluru"
+                },
+
+                // PAN India / Remote variants
+                {
+                  case: {
+                    $or: [
+                      {
+                        $regexMatch: {
+                          input: "$location",
+                          regex: /^India/i
+                        }
+                      },
+                      {
+                        $regexMatch: {
+                          input: "$location",
+                          regex: /Remote/i
+                        }
+                      },
+                      {
+                        $regexMatch: {
+                          input: "$location",
+                          regex: /Multiple Locations/i
+                        }
+                      },
+                      {
+                        $regexMatch: {
+                          input: "$location",
+                          regex: /PAN India/i
+                        }
+                      }
+                    ]
+                  },
+                  then: "Remote / PAN India"
+                }
+              ],
+              default: "$location"
+            }
+          }
+        }
+      },
+
+      // Remove blank locations
+      {
+        $match: {
+          location: {
+            $nin: ["", null]
+          }
+        }
+      },
+
+      // Count jobs per location
       {
         $group: {
           _id: "$location",
-          count: { $sum: 1 }
+          count: {
+            $sum: 1
+          }
         }
       },
+
+      // Sort by highest count
       {
-        $sort: { count: -1 }
+        $sort: {
+          count: -1,
+          _id: 1
+        }
       },
+
+      // Top 20 locations
       {
-        $limit: 7
+        $limit: 20
       }
     ]);
 
-    const formatted = locations.map((l) => ({
-      label: l._id,
-      count: l.count
+    const formatted = locations.map((loc) => ({
+      label: loc._id,
+      value: loc._id,
+      count: loc.count
     }));
 
     res.status(200).json({
@@ -1054,6 +1196,8 @@ const getJobsByLocation = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Error fetching locations:", error);
+
     res.status(500).json({
       success: false,
       message: "Error fetching locations",
